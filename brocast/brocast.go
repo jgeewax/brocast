@@ -1,11 +1,13 @@
 package brocast
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
-	"html/template"
+	htmltemplate "html/template"
 	"io/ioutil"
 	"net/http"
+	texttemplate "text/template"
 	"time"
 
 	"appengine"
@@ -17,7 +19,7 @@ import (
 
 const (
 	GOOGLE_MAPS_BASE_URL = "https://maps.google.com/maps?q="
-	BROCAST_EMAIL = "brocastmailer@gmail.com"
+	BROCAST_EMAIL        = "brocastmailer@gmail.com"
 )
 
 // Message represents a message sent on Brocast.
@@ -28,86 +30,113 @@ type Message struct {
 	Body        string
 	Recipients  []string
 	Account     string
+	Sender      string
 	Timestamp   time.Time
 }
 
-var rootTmpl = template.Must(template.ParseFiles("tmpl/base.html", "tmpl/root.html"))
+type emailCtx struct {
+	Body       string
+	MapsURL string
+}
 
-func rootHandler(w http.ResponseWriter, r *http.Request) {
-	if err := rootTmpl.Execute(w, nil); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+var rootTmpl = htmltemplate.Must(htmltemplate.ParseFiles("tmpl/base.html", "tmpl/root.html"))
+var emailTemplate = texttemplate.Must(texttemplate.New("email").Parse(emailText))
+
+const emailText = `I'm at {{.MapsURL}}
+
+{{.Body}}
+
+Send your own Brocasts at http://brocast.appspot.com/`
+
+func rootHandler(resp http.ResponseWriter, req *http.Request) {
+	if err := rootTmpl.Execute(resp, nil); err != nil {
+		http.Error(resp, err.Error(), http.StatusInternalServerError)
 	}
 }
 
-func brocastHandler(w http.ResponseWriter, r *http.Request) {
-	c := appengine.NewContext(r)
-	u := user.Current(c)
-	body, err := ioutil.ReadAll(r.Body)
+func brocastHandler(resp http.ResponseWriter, req *http.Request) {
+	ctx := appengine.NewContext(req)
 
+	// We don't need to check this for nil since /.* is login: required.
+	body, err := ioutil.ReadAll(req.Body)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(resp, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	var message Message
 	if err := json.Unmarshal(body, &message); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(resp, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	message.Account = u.String()
+	message.Account = user.Current(ctx).String()
 	message.Timestamp = time.Now()
-	k := datastore.NewIncompleteKey(c, "Message", nil)
-	key, err := datastore.Put(c, k, &message)
+	k := datastore.NewIncompleteKey(ctx, "Message", nil)
+	key, err := datastore.Put(ctx, k, &message)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(resp, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	t := taskqueue.NewPOSTTask("/mailworker", map[string][]string{"message_key": {key.Encode()}})
-	if _, err := taskqueue.Add(c, t, ""); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	keyString := key.Encode()
+	ctx.Infof(fmt.Sprintf("Dispatching task to process message: %v", keyString))
+	task := taskqueue.NewPOSTTask("/mailworker", map[string][]string{"message_key": {keyString}})
+	if _, err := taskqueue.Add(ctx, task, ""); err != nil {
+		http.Error(resp, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	fmt.Fprintf(w, "Response received")
+
+	resp.WriteHeader(http.StatusCreated)
+	return
 
 }
 
-func mailWorker(w http.ResponseWriter, r *http.Request) {
-	c := appengine.NewContext(r)
 
-	// Get the message key from the request
-	messageKey := r.FormValue("message_key")
+func mailWorker(resp http.ResponseWriter, req *http.Request) {
+	ctx := appengine.NewContext(req)
+
+	messageKey := req.FormValue("message_key")
 	key, err := datastore.DecodeKey(messageKey)
 	if err != nil {
-		c.Errorf("%v", err)
+		ctx.Errorf("%v", err)
 	}
-	c.Infof("Processing message: %v", messageKey)
+	ctx.Infof("Processing message: %v", messageKey)
 
 	// Retrieve the Message from the datastore
 	var message Message
-	if err := datastore.Get(c, key, &message); err != nil {
-		c.Errorf("%v", err)
+	if err := datastore.Get(ctx, key, &message); err != nil {
+		ctx.Errorf("%v", err)
 		return
 	}
 
-	c.Infof("Sending mail for message: %v", messageKey)
+	ctx.Infof("Sending mail for message: %v", messageKey)
 
 	// Send an email to each recipient with a google maps link
-	mapsurl := fmt.Sprintf("%v%v", GOOGLE_MAPS_BASE_URL, message.GeoLocation)
-	body := fmt.Sprintf("%v\n\nLocation: %v", message.Body, mapsurl)
-	msg := &mail.Message{
-		Sender:  fmt.Sprintf("Brocast <%v>", BROCAST_EMAIL),
-		To:      message.Recipients,
-		Subject: fmt.Sprintf("Brocast from %v", message.Account),
-		Body:    body,
-	}
-	if err := mail.Send(c, msg); err != nil {
-		c.Errorf("%v", err)
+	var buffer bytes.Buffer
+	err = emailTemplate.Execute(&buffer, emailCtx{
+		MapsURL: fmt.Sprintf("%v%v", GOOGLE_MAPS_BASE_URL, message.GeoLocation),
+		Body:    message.Body,
+	})
+
+	if err != nil {
+		ctx.Errorf("%v", err)
 		return
 	}
 
-	c.Infof("Mail sent for message: %v", messageKey)
+	body := buffer.String()
+	msg := &mail.Message{
+		Sender:  fmt.Sprintf("%v <%v>", message.Sender, BROCAST_EMAIL),
+		To:      message.Recipients,
+		Subject: fmt.Sprintf("Brocast from %v", message.Sender),
+		Body:    body,
+	}
+	if err := mail.Send(ctx, msg); err != nil {
+		ctx.Errorf("%v", err)
+		return
+	}
+
+	ctx.Infof("Mail sent for message: %v", messageKey)
 }
 
 func init() {

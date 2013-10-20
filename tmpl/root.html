@@ -34,7 +34,8 @@ $(document).ready(function() {
 
     // Marshal form contents into a JSON object
     var recipients = $("input#recipients").val().split(","),
-        body = $("textarea#body").val();
+      body = $("textarea#body").val(),
+      sender = $("input#sender").val();
     for(var i = 0; i < recipients.length; i++) {
       if(!recipients[i] || recipients[i].indexOf("@") == -1) {
         return;
@@ -42,6 +43,7 @@ $(document).ready(function() {
     }
     var message = JSON.stringify({
       "recipients": recipients,
+      "sender": sender,
       "body": body,
       "geolocation": geolocation
     });
@@ -57,12 +59,17 @@ $(document).ready(function() {
 {{define "content"}}
 <form role="form">
   <div class="form-group">
+    <label for="sender">Your name</label>
+    <input type="text" class="form-control" id="sender" placeholder="Sky God" name="sender">
+  </div>
+  <div class="form-group">
     <label for="recipients">Email addresses (Separated by commas)</label>
     <input type="text" class="form-control" id="recipients" placeholder="test1@example.com, test2@example.com">
   </div>
   <div class="form-group">
+    <label for="body">Message</label>
     <textarea class="form-control" id="body" name="body" placeholder="Your message"></textarea>
   </div>
-  <button id="submit" class="btn btn-default">Brocast it!</button>
+  <button id="submit" class="btn btn-success btn-large">Brocast it!</button>
 </form>
 {{end}}
