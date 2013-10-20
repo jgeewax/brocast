@@ -1,4 +1,5 @@
 {{define "js"}}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/geo-location-javascript/0.4.8/geo-min.js">
 <script type="text/javascript">
 // On form button click:
 // Get emails and convert to list of strings, validating each one
@@ -7,6 +8,26 @@
 // Turn it into a JSON string and send to server
 
 $(document).ready(function() {
+
+  var geolocation;
+
+  if(geo_position_js.init()) {
+    geo_position_js.getCurrentPosition(success, error, {enableHighAccuracy: true});
+    console.log("this should work, wtf");
+  }
+
+  else {
+    console.log("fail");
+  }
+
+  function success(p) {
+    geolocation = p.latitude + ", " + p.longditude;    
+  }
+
+  function error(p) {
+    alert(p.message);
+  }
+
   $("button#submit").click(function(e) {
     // Stop form from submitting
     e.preventDefault(e);
@@ -19,7 +40,11 @@ $(document).ready(function() {
         return;
       }
     }
-    var message = JSON.stringify({"recipients": recipients, "body": body});
+    var message = JSON.stringify({
+      "recipients": recipients,
+      "body": body,
+      "geolocation": geolocation
+    });
 
     // Send message to endpoint.
     $.post("/brocasts", message, function(data, textStatus, jqXHR) {
