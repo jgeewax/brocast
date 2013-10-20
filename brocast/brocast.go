@@ -15,6 +15,11 @@ import (
 	"appengine/user"
 )
 
+const (
+	GOOGLE_MAPS_BASE_URL = "https://maps.google.com/maps?q="
+	BROCAST_EMAIL = "brocastmailer@gmail.com"
+)
+
 // Message represents a message sent on Brocast.
 // Each Message contains the Lat/Long location of the sender, the sender's
 // key, and a message body.
@@ -89,11 +94,13 @@ func mailWorker(w http.ResponseWriter, r *http.Request) {
 	c.Infof("Sending mail for message: %v", messageKey)
 
 	// Send an email to each recipient with a google maps link
+	mapsurl := fmt.Sprintf("%v%v", GOOGLE_MAPS_BASE_URL, message.GeoLocation)
+	body := fmt.Sprintf("%v\n\nLocation: %v", message.Body, mapsurl)
 	msg := &mail.Message{
-		Sender:  "Brocast <jonathancooper2010@gmail.com>",
+		Sender:  fmt.Sprintf("Brocast <%v>", BROCAST_EMAIL),
 		To:      message.Recipients,
 		Subject: fmt.Sprintf("Brocast from %v", message.Account),
-		Body:    message.Body,
+		Body:    body,
 	}
 	if err := mail.Send(c, msg); err != nil {
 		c.Errorf("%v", err)

@@ -20,8 +20,8 @@ $(document).ready(function() {
   }
 
   function success(p) {
-    geolocation = p.coords.latitude + ", " + p.coords.longitude;    
-    console.log(p)
+    geolocation = String(p.coords.latitude).concat(",", String(p.coords.longitude));
+    console.log(geolocation);
   }
 
   function error(p) {
