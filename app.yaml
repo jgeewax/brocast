@@ -4,6 +4,10 @@ runtime: go
 api_version: go1
 
 handlers:
+- url: /mailworker
+  login: admin
+  script: _go_app
+
 - url: /.*
   login: required
   script: _go_app
