@@ -20,7 +20,8 @@ $(document).ready(function() {
   }
 
   function success(p) {
-    geolocation = p.latitude + ", " + p.longditude;    
+    geolocation = p.coords.latitude + ", " + p.coords.longitude;    
+    console.log(p)
   }
 
   function error(p) {

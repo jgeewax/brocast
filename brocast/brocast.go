@@ -6,6 +6,7 @@ import (
 	"html/template"
 	"io/ioutil"
 	"net/http"
+	"time"
 
 	"appengine"
 	"appengine/datastore"
@@ -20,6 +21,7 @@ type Message struct {
 	Body        string
 	Recipients  []string
 	Account     string
+	Timestamp   time.Time
 }
 
 var rootTmpl = template.Must(template.ParseFiles("tmpl/base.html", "tmpl/root.html"))
@@ -47,6 +49,7 @@ func brocastHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	message.Account = u.String()
+	message.Timestamp = time.Now()
 	key := datastore.NewIncompleteKey(c, "Message", nil)
 	if _, err := datastore.Put(c, key, &message); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
