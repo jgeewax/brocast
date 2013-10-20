@@ -13,11 +13,10 @@ $(document).ready(function() {
 
   if(geo_position_js.init()) {
     geo_position_js.getCurrentPosition(success, error, {enableHighAccuracy: true});
-    console.log("this should work, wtf");
   }
 
   else {
-    console.log("fail");
+    alert("Your browser does not support geolocation.");
   }
 
   function success(p) {
