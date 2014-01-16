@@ -8,3 +8,6 @@ Planned features:
 + Automatic location discovery via Javascript
 + Mass emails
 + Mobile optimized front end (ie. Bootstrap)
++ Be awesome
++ Learn to code
++ Take over world
